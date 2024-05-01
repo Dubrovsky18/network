@@ -1,0 +1,184 @@
+object-group service ssh
+  port-range 22
+exit
+object-group service dhcp_server
+  port-range 67
+exit
+object-group service dhcp_client
+  port-range 68
+exit
+object-group service ntp
+  port-range 123
+exit
+
+syslog max-files 3
+syslog file-size 512
+syslog file tmpsys:syslog/default info
+
+username admin
+  password encrypted $6$ULCrGP73E8kwqeGQ$1Jnd.BakPuSelni8psYof78Z64QBVzeDGzupvqfsmmtKe/HwPbuZxP/.srOYUqFgkQ3ZVAFV6B.z/.gT2swtV0
+exit
+
+
+boot host auto-config
+vlan 2,8
+exit
+
+security zone trusted
+exit
+security zone untrusted
+exit
+
+router ospf 10
+  redistribute connected
+  redistribute static
+  redistribute rip
+  area 10.0.0.0
+    enable
+  exit
+  enable
+exit
+
+bridge 1
+  vlan 1
+  security-zone trusted
+  ip address 192.168.1.1/24
+  enable
+exit
+bridge 2
+  vlan 2
+  security-zone untrusted
+  ip address dhcp
+  enable
+exit
+bridge 8
+  vlan 8
+  security-zone untrusted
+  ip address dhcp
+  enable
+exit
+
+interface gigabitethernet 1/0/1
+  mode switchport
+  switchport access vlan 2
+exit
+interface gigabitethernet 1/0/2
+  mode switchport
+exit
+interface gigabitethernet 1/0/3
+  ip firewall disable
+  ip address 10.10.0.1/24
+  ip ospf instance 10
+  ip ospf area 10.0.0.0
+  ip ospf
+exit
+interface gigabitethernet 1/0/4
+  mode switchport
+exit
+interface gigabitethernet 1/0/5
+  ip firewall disable
+  ip address 10.20.0.1/24
+  ip ospf instance 10
+  ip ospf area 10.0.0.0
+  ip ospf
+exit
+interface gigabitethernet 1/0/6
+  ip firewall disable
+exit
+interface gigabitethernet 1/0/7
+  ip firewall disable
+exit
+interface gigabitethernet 1/0/8
+  security-zone trusted
+  ip firewall disable
+  ip address 10.18.0.1/24
+exit
+interface gigabitethernet 1/0/9
+  mode switchport
+exit
+security zone-pair trusted untrusted
+  rule 1
+    action permit
+    enable
+  exit
+exit
+security zone-pair trusted trusted
+  rule 1
+    action permit
+    enable
+  exit
+exit
+security zone-pair trusted self
+  rule 10
+    action permit
+    match protocol tcp
+    match destination-port ssh
+    enable
+  exit
+  rule 20
+    action permit
+    match protocol icmp
+    enable
+  exit
+  rule 30
+    action permit
+    match protocol udp
+    match source-port dhcp_client
+    match destination-port dhcp_server
+    enable
+  exit
+  rule 40
+    action permit
+    match protocol udp
+    match destination-port ntp
+    enable
+  exit
+exit
+security zone-pair untrusted self
+  rule 1
+    action permit
+    match protocol udp
+    match source-port dhcp_server
+    match destination-port dhcp_client
+    enable
+  exit
+exit
+
+security passwords default-expired
+
+nat source
+  ruleset factory
+    to zone untrusted
+    rule 10
+      description "replace 'source ip' by outgoing interface ip address"
+      action source-nat interface
+      enable
+    exit
+  exit
+exit
+
+ip dhcp-server
+ip dhcp-server pool lan-pool
+  network 192.168.1.0/24
+  address-range 192.168.1.2-192.168.1.254
+  default-router 192.168.1.1
+exit
+ip dhcp-server pool lan-pool8
+  network 10.18.0.0/24
+  address-range 10.18.0.10-10.18.0.200
+  default-router 10.18.0.1
+  dns-server 77.88.8.8
+exit
+
+ip route 10.18.0.0/24 interface gigabitethernet 1/0/3
+
+ip ssh server
+
+archive
+  path ftp://user:123@10.10.3.29:/Eltex/eltex-$h-$t
+  auto
+  by-commit
+exit
+
+ntp enable
+ntp broadcast-client enable

@@ -21,13 +21,13 @@ set 11 default-vlan-id=0
 /interface wireless security-profiles
 set [ find default=yes ] supplicant-identity=MikroTik
 /ip pool
-add name=br_pool ranges=10.10.5.17-10.10.5.30
+add name=BR_POOL ranges=10.10.5.17-10.10.5.30
 /ip dhcp-server
-add address-pool=br_pool disabled=no interface=dhcp_BR name=BR
+add address-pool=BR_POOL disabled=no interface=dhcp_BR name=BR
 /routing ospf area
 add area-id=10.0.0.0 name=backbone0
 /routing ospf instance
-set [ find default=yes ] redistribute-connected=as-type-1 redistribute-rip=as-type-1 redistribute-static=as-type-1 router-id=2.2.2.2
+set [ find default=yes ] redistribute-connected=as-type-1 redistribute-rip=as-type-1 redistribute-static=as-type-1 router-id=1.1.1.1
 /interface bridge port
 add bridge=dhcp_BR interface=ether9
 add bridge=dhcp_BR interface=ether10
@@ -38,13 +38,29 @@ add address=10.20.0.2/24 interface=ether3 network=10.20.0.0
 add address=10.10.5.17/28 interface=dhcp_BR network=10.10.5.16
 /ip dhcp-server network
 add address=10.10.5.16/28 gateway=10.10.5.17 netmask=28
-/ip dns
-set servers=77.88.8.8
 /routing ospf network
 add area=backbone0 network=10.20.0.0/16
 /system identity
 set name=BR
-/system ntp client
-set enabled=yes primary-ntp=10.10.0.2
 /system script
-add dont-require-permissions=no name=backup_auto owner=admin policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon source=""
+add dont-require-permissions=no name=backup-mkt owner=admin policy=ftp,read,write,policy,test source=":local tmpdate [/system clock get date];\
+    \n:local months (\"jan\",\"feb\",\"mar\",\"apr\",\"may\",\"jun\",\"jul\",\"aug\",\"sep\",\"oct\",\"nov\",\"dec\");\
+    \n:local month [ :pick \$tmpdate 0 3 ];\
+    \n:local mm ([ :find \$months \$month -1 ] + 1);\
+    \n:if (\$mm < 10) do={ :set mm (\"0\" . \$mm); }\
+    \n:local date ([:pick \$tmpdate 4 6] .\"-\" . \$mm .\"-\" . [:pick \$tmpdate 7 11])\
+    \n\
+    \n:local myname \"MikroTik-BR\"\
+    \n:local fname (\$myname.\"_\".\$date);\
+    \n:local bname (\$myname.\"_\".\$date.\".backup\");\
+    \n:local ftpuser \"user\";\
+    \n:local ftppass \"123\";\
+    \n:local ftpaddr \"10.10.5.30\";\
+    \n\
+    \n/system backup save name=\$fname ;\
+    \n:delay 10;\
+    \n/export file=\$fname\
+    \n:delay 10;\
+    \n\
+    \n/tool fetch address=\$ftpaddr src-path=\$bname user=\$ftpuser password=\$ftppass port=21 upload=yes mode=ftp dst-path=\$bname\
+    \n:delay 15;"

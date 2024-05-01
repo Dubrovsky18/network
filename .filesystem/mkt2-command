@@ -1,0 +1,60 @@
+/interface bridge add name=dhcp_hq
+/interface ethernet switch port set 0 default-vlan-id=0
+/interface ethernet switch port set 1 default-vlan-id=0
+/interface ethernet switch port set 2 default-vlan-id=0
+/interface ethernet switch port set 3 default-vlan-id=0
+/interface ethernet switch port set 4 default-vlan-id=0
+/interface ethernet switch port set 5 default-vlan-id=0
+/interface ethernet switch port set 6 default-vlan-id=0
+/interface ethernet switch port set 7 default-vlan-id=0
+/interface ethernet switch port set 8 default-vlan-id=0
+/interface ethernet switch port set 9 default-vlan-id=0
+/interface ethernet switch port set 10 default-vlan-id=0
+/interface ethernet switch port set 11 default-vlan-id=0
+/interface wireless security-profiles set [ find default=yes ] supplicant-identity=MikroTik
+/ip pool add name=HQ_POOL ranges=10.10.3.17-10.10.3.30
+/ip dhcp-server add address-pool=HQ_POOL disabled=no interface=dhcp_hq name=HQ
+/routing ospf area add area-id=10.0.0.0 name=backbone0
+/routing ospf instance set [ find default=yes ] distribute-default=always-as-type-1 redistribute-connected=as-type-1 redistribute-rip=as-type-1 redistribute-static=as-type-1
+/interface bridge port add bridge=dhcp_hq interface=ether9
+/interface bridge port add bridge=dhcp_hq interface=ether10
+/ip neighbor discovery-settings set discover-interface-list=!dynamic
+/ip address add address=10.10.0.2/24 interface=ether3 network=10.10.0.0
+/ip address add address=10.10.3.17/28 interface=dhcp_hq network=10.10.3.16
+/ip dhcp-client add disabled=no interface=ether1
+/ip dhcp-server network add address=10.10.3.16/28 gateway=10.10.3.17 netmask=28
+/ip firewall nat add action=masquerade chain=srcnat out-interface=ether1 src-address=10.10.0.0/16
+/ip firewall nat add action=masquerade chain=srcnat out-interface=ether1 src-address=10.18.0.0/24
+/ip firewall nat add action=masquerade chain=srcnat out-interface=ether1 src-address=10.0.0.0/8
+/ip firewall nat add action=masquerade chain=srcnat out-interface=ether1 src-address=10.20.0.0/16
+/routing ospf network add area=backbone0 network=10.10.0.0/16
+/system clock set time-zone-name=Europe/Moscow
+/system identity set name=HQ
+/system scheduler add interval=5m name=backup_every_5m on-event=backup_to_run policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon start-date=may/01/2024 start-time=12:38:59
+/system script add dont-require-permissions=no name=backup_to_run owner=admin policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon source=":local tmpdate [/system clock get date];\
+    \n:local months (\"jan\",\"feb\",\"mar\",\"apr\",\"may\",\"jun\",\"jul\",\"aug\",\"sep\",\"oct\",\"nov\",\"dec\");\
+    \n:local month [ :pick \$tmpdate 0 3 ];\
+    \n:local mm ([ :find \$months \$month -1 ] + 1);\
+    \n:if (\$mm < 10) do={ :set mm (\"0\" . \$mm); }\
+    \n:local date ([:pick \$tmpdate 4 6] .\"-\" . \$mm .\"-\" . [:pick \$tmpdate 7 11])\
+    \n\
+    \n:local myname \"Mikrotik-BR\"\
+    \n:local fname (\$myname.\"_\".\$date);\
+    \n:local bname (\$myname.\"_\".\$date.\".backup\");\
+    \n:local ename (\$myname.\"_\".\$date.\".rsc\");\
+    \n:local dstbname (\"Mikrotik_HOST/\".\$bname);\
+    \n:local dstename (\"Mikrotik_HOST/\".\$ename);\
+    \n:local ftpuser \"user\";\
+    \n:local ftppass \"123\";\
+    \n:local ftpaddr \"10.10.3.29\";\
+    \n\
+    \n/system backup save name=\$fname password=BackPaSSword;\
+    \n:delay 5;\
+    \n/export file=\$fname\
+    \n:delay 5;\
+    \n\
+    \n/tool fetch address=\$ftpaddr src-path=\$bname user=\$ftpuser password=\$ftppass port=21 upload=yes mode=ftp dst-path=\$dstbname\
+    \n:delay 10;\
+    \n/tool fetch address=\$ftpaddr src-path=\$ename user=\$ftpuser password=\$ftppass port=21 upload=yes mode=ftp dst-path=\$dstename\
+    \n:delay 10;\
+    \n"
