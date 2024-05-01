@@ -224,6 +224,169 @@ iperf3 -c <IP server HQS> -i 1 -t 30 -p 5003
 
 ## 4. SMB - server (FTP)
 
+# Устанавливаем docker и samba
+  ```
+  curl -fsSL https://get.docker.com | sh
 
 
+  sudo apt install samba
+
+  mkdir /home/sirius/sambashare/
+
+```
+Редактируем файл
+
+  ```
+    sudo nano /etc/samba/smb.conf
+  ```
+
+
+  ```
+    [sambashare]
+      comment = Samba on Ubuntu
+      path = /home/kroll/sambashare
+      read only = no
+      browsable = yes
+
+    [tftp]
+      comment = tftp directory
+      read only = no
+      create mode = 0750
+      locking = no
+      path = /home/sirius/sambashare
+      guest ok = no
+  ```
+
+  ```
+    sudo service smbd restart
+  ```
+
+Задаем пароль
+
+  ```
+    sudo smbpasswd -a sirius
+  ```
+
+
+Создаем файл docker-compose.yml и вписываем
+    ```
+    services:
+      ftp-server:
+        container_name: my-ftp-server
+        environment:
+          - FTP_PASS=123
+          - FTP_USER=user
+        image: garethflowers/ftp-server
+        ports:
+          - '20-21:20-21/tcp'
+          - '40000-40009:40000-40009/tcp'
+        volumes:
+          - '/home/sirius/sambashare:/home/user'
+    ```
+
+После запускаем 
+    ```
+      docker compose up 
+    ```
+
+
+## 5. Backups
+
+## ELTEX Auto Backup
+
+```
+  configure terminal
+  archive
+  auto
+  by-commit
+  path ftp://user:123@<IP-server>:/eltex-backup-$h-$t
+  
+```
+
+## Восстановление Eltex из бекапа
+
+copy ftp://user:123@<IP-SERVER>:/<NAME BACKUP> system:candidate-config
+
+#### как пример
+copy ftp://user:123@10.10.5.30:/eltex-$h-$t_20240501_122300 system:candidate-config 
+
+## Mikrotik Auto Backup
+
+/system script add dont-require-permissions=no name=backup_to_run owner=admin policy=\
+    ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon source=""
+/system script edit 0 source
+
+# вставляем этот скрипт
+  ```
+name="backup_to_run" owner="admin" policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon dont-require-permissions=no last-started=may/01/2024 14:15:58 run-count=28 
+     source=
+       :local tmpdate [/system clock get date];
+       :local months ("jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec");
+       :local month [ :pick $tmpdate 0 3 ];
+       :local mm ([ :find $months $month -1 ] + 1);
+       :if ($mm < 10) do={ :set mm ("0" . $mm); }
+       :local date ([:pick $tmpdate 4 6] ."-" . $mm ."-" . [:pick $tmpdate 7 11])
+       
+       :local myname "Mikrotik-<УКАЗАТЬ ИМЯ HQ/BR>"
+       :local fname ($myname."_".$date);
+       :local bname ($myname."_".$date.".backup");
+       :local ename ($myname."_".$date.".rsc");
+       :local dstbname ("Mikrotik_HOST/".$bname);
+       :local dstename ("Mikrotik_HOST/".$ename);
+       :local ftpuser "user";
+       :local ftppass "123";
+       :local ftpaddr "<Заменить на IP сервера>";
+       
+       /system backup save name=$fname password=BackPaSSword;
+       :delay 5;
+       /export file=$fname
+       :delay 5;
+       
+       /tool fetch address=$ftpaddr src-path=$bname user=$ftpuser password=$ftppass port=21 upload=yes mode=ftp dst-path=$dstbname
+       :delay 10;
+       /tool fetch address=$ftpaddr src-path=$ename user=$ftpuser password=$ftppass port=21 upload=yes mode=ftp dst-path=$dstename
+       :delay 10;
+  ```
+#### каждые пять минут будет отправляться backup
+/system scheduler add interval=5m name=backup_every_5m on-event=backup_to_run policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon start-time=startup
+
+
+### Скачиваем backup и загружаемся с него
+/tool fetch address=10.10.3.29 src-path=Mikrotik_HOST/Mikrotik-HQ_01-05-2024.backup user=user password=123 port=21 dst-path=backup_candidate.backup mode=ftp 
+/system backup load name=Mikrotik-HQ_01-05-2024.backup 
+password: BackPaSSword
+
+## 6. NTP
+
+### На Mikrotik HQ 
+
+Через web открыть mikrotik и обновить до версии 6.49.15
+Скачать https://download.mikrotik.com/routeros/6.49.15/all_packages-arm-6.49.15.zip
+Разорхивировать
+Найти пакет NTP и загрузить его в /files
+делаем Reboot Mikrotik
+
+Дальше
+```
+  /system ntp server set broadcast=yes broadcast-addresses=10.10.3.17 enabled=yes
+```
+
+### На Mikrotik BR 
+/system ntp client set enabled=yes primary-ntp=10.10.3.17
+
+### на ELTEX
+config
+ntp enable
+ntp broadcast-client enable
+ntp server 10.10.3.17
+  prefer
+end
+commit 
+confirm
+
+## 7. Firewall
+#### Например нужно для адреса 10.10.3.30 заблокировать пинг по 8.8.8.8
+/ip firewall filter add action=drop chain=forward dst-address=8.8.8.8 log=yes protocol=icmp src-address=10.10.3.30
+#### разрешаем обращаться к нам по 21 порту оттовсюду
+/ip firewall filter add action=accept chain=input dst-port=21 protocol=tcp
 

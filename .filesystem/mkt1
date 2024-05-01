@@ -1,0 +1,81 @@
+# apr/30/2024 17:47:05 by RouterOS 6.49.15
+# software id = Y459-6U52
+#
+# model = RB4011iGS+
+# serial number = HD508FPNTBC
+/interface bridge
+add name=dhcp_hq
+/interface ethernet switch port
+set 0 default-vlan-id=0
+set 1 default-vlan-id=0
+set 2 default-vlan-id=0
+set 3 default-vlan-id=0
+set 4 default-vlan-id=0
+set 5 default-vlan-id=0
+set 6 default-vlan-id=0
+set 7 default-vlan-id=0
+set 8 default-vlan-id=0
+set 9 default-vlan-id=0
+set 10 default-vlan-id=0
+set 11 default-vlan-id=0
+/interface wireless security-profiles
+set [ find default=yes ] supplicant-identity=MikroTik
+/ip pool
+add name=hq_pool ranges=10.10.3.17-10.10.3.30
+/ip dhcp-server
+add address-pool=hq_pool disabled=no interface=dhcp_hq name=hq
+/routing ospf area
+add area-id=10.0.0.0 name=backbone0
+/routing ospf instance
+set [ find default=yes ] distribute-default=always-as-type-1 redistribute-connected=as-type-1 redistribute-rip=as-type-1 redistribute-static=as-type-1 router-id=1.1.1.1
+/user group
+add name=FTP policy=ftp,read,write,web,!local,!telnet,!ssh,!reboot,!policy,!test,!winbox,!password,!sniff,!sensitive,!api,!romon,!dude,!tikapp
+/interface bridge port
+add bridge=dhcp_hq interface=ether9
+add bridge=dhcp_hq interface=ether10
+/ip neighbor discovery-settings
+set discover-interface-list=!dynamic
+/ip address
+add address=10.10.0.2/24 interface=ether3 network=10.10.0.0
+add address=10.10.3.17/28 interface=dhcp_hq network=10.10.3.16
+/ip dhcp-client
+add disabled=no interface=ether1
+/ip dhcp-server network
+add address=10.10.3.16/28 gateway=10.10.3.17 netmask=28
+/ip firewall filter
+add action=drop chain=forward disabled=yes log=yes protocol=tcp src-address=10.10.3.30
+add action=accept chain=input dst-port=21 protocol=tcp
+/ip firewall nat
+add action=masquerade chain=srcnat out-interface=ether1 src-address=10.10.0.0/16
+/routing ospf network
+add area=backbone0 network=10.10.0.0/16
+/system clock
+set time-zone-name=Europe/Moscow
+/system identity
+set name=HQ
+/system ntp server
+set broadcast=yes broadcast-addresses=10.10.3.17 enabled=yes
+/system scheduler
+add interval=10m name=schedule-backup-Mkt3.17 policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon start-time=startup
+/system script
+add dont-require-permissions=no name=backup-mkt owner=admin policy=ftp,read,write,policy,test source=":local tmpdate [/system clock get date];\
+    \n:local months (\"jan\",\"feb\",\"mar\",\"apr\",\"may\",\"jun\",\"jul\",\"aug\",\"sep\",\"oct\",\"nov\",\"dec\");\
+    \n:local month [ :pick \$tmpdate 0 3 ];\
+    \n:local mm ([ :find \$months \$month -1 ] + 1);\
+    \n:if (\$mm < 10) do={ :set mm (\"0\" . \$mm); }\
+    \n:local date ([:pick \$tmpdate 4 6] .\"-\" . \$mm .\"-\" . [:pick \$tmpdate 7 11])\
+    \n\
+    \n:local myname \"Mkt-3.17\"\
+    \n:local fname (\$myname.\"_\".\$date);\
+    \n:local bname (\$myname.\"_\".\$date.\".backup\");\
+    \n:local ftpuser \"user\";\
+    \n:local ftppass \"123\";\
+    \n:local ftpaddr \"10.10.5.30\";\
+    \n\
+    \n/system backup save name=\$fname ;\
+    \n:delay 10;\
+    \n/export file=\$fname\
+    \n:delay 10;\
+    \n\
+    \n/tool fetch address=\$ftpaddr src-path=\$bname user=\$ftpuser password=\$ftppass port=21 upload=yes mode=ftp dst-path=\$bname\
+    \n:delay 15;"
