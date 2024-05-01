@@ -244,7 +244,7 @@ iperf3 -c <IP server HQS> -i 1 -t 30 -p 5003
   ```
     [sambashare]
       comment = Samba on Ubuntu
-      path = /home/kroll/sambashare
+      path = /home/sirius/sambashare
       read only = no
       browsable = yes
 
@@ -269,6 +269,8 @@ iperf3 -c <IP server HQS> -i 1 -t 30 -p 5003
 
 
 Создаем файл docker-compose.yml и вписываем
+touch ~/docker-compose.yml
+sudo nano ~/docker-compose.yml
     ```
     services:
       ftp-server:
@@ -307,6 +309,9 @@ iperf3 -c <IP server HQS> -i 1 -t 30 -p 5003
 
 copy ftp://user:123@<IP-SERVER>:/<NAME BACKUP> system:candidate-config
 
+commit 
+confirm
+
 #### как пример
 copy ftp://user:123@10.10.5.30:/eltex-$h-$t_20240501_122300 system:candidate-config 
 
@@ -318,34 +323,32 @@ copy ftp://user:123@10.10.5.30:/eltex-$h-$t_20240501_122300 system:candidate-con
 
 # вставляем этот скрипт
   ```
-name="backup_to_run" owner="admin" policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon dont-require-permissions=no last-started=may/01/2024 14:15:58 run-count=28 
-     source=
-       :local tmpdate [/system clock get date];
-       :local months ("jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec");
-       :local month [ :pick $tmpdate 0 3 ];
-       :local mm ([ :find $months $month -1 ] + 1);
-       :if ($mm < 10) do={ :set mm ("0" . $mm); }
-       :local date ([:pick $tmpdate 4 6] ."-" . $mm ."-" . [:pick $tmpdate 7 11])
+:local tmpdate [/system clock get date];
+:local months ("jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec");
+:local month [ :pick $tmpdate 0 3 ];
+:local mm ([ :find $months $month -1 ] + 1);
+:if ($mm < 10) do={ :set mm ("0" . $mm); }
+:local date ([:pick $tmpdate 4 6] ."-" . $mm ."-" . [:pick $tmpdate 7 11])
        
-       :local myname "Mikrotik-<УКАЗАТЬ ИМЯ HQ/BR>"
-       :local fname ($myname."_".$date);
-       :local bname ($myname."_".$date.".backup");
-       :local ename ($myname."_".$date.".rsc");
-       :local dstbname ("Mikrotik_HOST/".$bname);
-       :local dstename ("Mikrotik_HOST/".$ename);
-       :local ftpuser "user";
-       :local ftppass "123";
-       :local ftpaddr "<Заменить на IP сервера>";
+:local myname "Mikrotik-<УКАЗАТЬ ИМЯ HQ/BR>"
+:local fname ($myname."_".$date);
+:local bname ($myname."_".$date.".backup");
+:local ename ($myname."_".$date.".rsc");
+:local dstbname ("Mikrotik_HOST/".$bname);
+:local dstename ("Mikrotik_HOST/".$ename);
+:local ftpuser "user";
+:local ftppass "123";
+:local ftpaddr "<Заменить на IP сервера>";
        
-       /system backup save name=$fname password=BackPaSSword;
-       :delay 5;
-       /export file=$fname
-       :delay 5;
+/system backup save name=$fname password=BackPaSSword;
+:delay 5;
+/export file=$fname
+:delay 5;
        
-       /tool fetch address=$ftpaddr src-path=$bname user=$ftpuser password=$ftppass port=21 upload=yes mode=ftp dst-path=$dstbname
-       :delay 10;
-       /tool fetch address=$ftpaddr src-path=$ename user=$ftpuser password=$ftppass port=21 upload=yes mode=ftp dst-path=$dstename
-       :delay 10;
+/tool fetch address=$ftpaddr src-path=$bname user=$ftpuser password=$ftppass port=21 upload=yes mode=ftp dst-path=$dstbname
+:delay 10;
+/tool fetch address=$ftpaddr src-path=$ename user=$ftpuser password=$ftppass port=21 upload=yes mode=ftp dst-path=$dstename
+:delay 10;
   ```
 #### каждые пять минут будет отправляться backup
 /system scheduler add interval=5m name=backup_every_5m on-event=backup_to_run policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon start-time=startup
@@ -368,17 +371,17 @@ password: BackPaSSword
 
 Дальше
 ```
-  /system ntp server set broadcast=yes broadcast-addresses=10.10.3.17 enabled=yes
+  /system ntp server set broadcast=yes broadcast-addresses=<Адресс Микротика HQ> enabled=yes
 ```
 
 ### На Mikrotik BR 
-/system ntp client set enabled=yes primary-ntp=10.10.3.17
+/system ntp client set enabled=yes primary-ntp=<Mikrotik HQ>
 
 ### на ELTEX
 config
 ntp enable
 ntp broadcast-client enable
-ntp server 10.10.3.17
+ntp server <Mikrotik HQ>
   prefer
 end
 commit 
