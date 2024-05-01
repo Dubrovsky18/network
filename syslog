@@ -130,6 +130,7 @@ exit
 /system identity set name=HQ
 
 # Конфигурация портов:
+                        
 /ip address add address=10.10.3.2/24 interface=ether3
 # Втыкаем 1 порт Mikrotik в интернет (кабель в пол) и прописываем команду:
 /ip dhcp-client add disabled=no interface=ether1 
@@ -151,10 +152,13 @@ exit
 /interface bridge port add bridge=dhcp_hq interface=ether9
 /interface bridge port add bridge=dhcp_hq interface=ether10
 # Тут АККУРАТНО в зависимости от задания (сколько ip-адресов будет указано и как правильно распредялть)
+                        | HostMin / mask |                      | Network |
 /ip address add address= 10.10.3.17/28 interface=dhcp_hq network=10.10.3.16
 
+                                 |HostMin - HostMax| (или можно +1 до -1 ) - взависоимсти от задания сколько ip адресов должно быть
 /ip pool add name=HQ_pool ranges=10.10.3.17-10.10.3.30
 /ip dhcp-server add address-pool=HQ_pool disabled=no interface=dhcp_hq name=HQ
+                                    |NETWORK/mask|        |HostMin|         | mask |
 /ip dhcp-server network add address=10.10.3.16/28 gateway=10.10.3.17 netmask=28
 
 
@@ -232,6 +236,10 @@ iperf3 -c <IP server HQS> -i 1 -t 30 -p 5003
   sudo apt install samba
 
   mkdir /home/sirius/sambashare/
+  mkdir /home/sirius/sambashare/MICROTIK_HOST
+  mkdir /home/sirius/sambashare/MICROTIK_SLAVE
+  mkdir /home/sirius/sambashare/ELTEX
+
 
 ```
 Редактируем файл
@@ -334,8 +342,8 @@ copy ftp://user:123@10.10.5.30:/eltex-$h-$t_20240501_122300 system:candidate-con
 :local fname ($myname."_".$date);
 :local bname ($myname."_".$date.".backup");
 :local ename ($myname."_".$date.".rsc");
-:local dstbname ("Mikrotik_HOST/".$bname);
-:local dstename ("Mikrotik_HOST/".$ename);
+:local dstbname ("MIKROTIK_HOST/".$bname);
+:local dstename ("MIKROTIK_HOST/".$ename);
 :local ftpuser "user";
 :local ftppass "123";
 :local ftpaddr "<Заменить на IP сервера>";
@@ -355,7 +363,7 @@ copy ftp://user:123@10.10.5.30:/eltex-$h-$t_20240501_122300 system:candidate-con
 
 
 ### Скачиваем backup и загружаемся с него
-/tool fetch address=10.10.3.29 src-path=Mikrotik_HOST/Mikrotik-HQ_01-05-2024.backup user=user password=123 port=21 dst-path=backup_candidate.backup mode=ftp 
+/tool fetch address=10.10.3.29 src-path=MIKROTIK_HOST/Mikrotik-HQ_01-05-2024.backup user=user password=123 port=21 dst-path=backup_candidate.backup mode=ftp 
 /system backup load name=Mikrotik-HQ_01-05-2024.backup 
 password: BackPaSSword
 
@@ -363,7 +371,7 @@ password: BackPaSSword
 
 ### На Mikrotik HQ 
 
-Через web открыть mikrotik и обновить до версии 6.49.15
+Через web (по ip адрес) открыть mikrotik и обновить до версии 6.49.15
 Скачать https://download.mikrotik.com/routeros/6.49.15/all_packages-arm-6.49.15.zip
 Разорхивировать
 Найти пакет NTP и загрузить его в /files
