@@ -53,7 +53,7 @@ configure
                         /---------\
                        |   Eltex   |
                         \---------/
-                  eth3 /            \ eth5
+                  eth3 /            \ eth4
 Internet             /               \
   \                 /                 \
    \          eth3 /                   \ eth3
@@ -106,7 +106,7 @@ exit
 ```
 Порт 2:
 ```
-int gi1/0/5 #в этой строчке указан номер порта Eltex, который подключен к Mikrotik2
+int gi1/0/4 #в этой строчке указан номер порта Eltex, который подключен к Mikrotik2
 mode routerport 
 des TO_MIKROTIK_BR
 ip address 10.10.5.1/24
@@ -153,14 +153,14 @@ exit
 /interface bridge port add bridge=dhcp_hq interface=ether10
 # Тут АККУРАТНО в зависимости от задания (сколько ip-адресов будет указано и как правильно распредялть)
                         | HostMin / mask |                      | Network |
-/ip address add address= 10.10.3.17/28 interface=dhcp_hq network=10.10.3.16
+/ip address add address= 192.168.99.65/26 interface=dhcp_hq network=192.168.99.64
 
                                  |HostMin - HostMax| (или можно +1 до -1 ) - взависоимсти от задания сколько ip адресов должно быть
-/ip pool add name=HQ_pool ranges=10.10.3.17-10.10.3.30
+/ip pool add name=HQ_pool ranges=192.168.99.70-192.168.99.126
 /ip dhcp-server add address-pool=HQ_pool disabled=no interface=dhcp_hq name=HQ
                                     |NETWORK/mask|        |HostMin|         | mask |
-/ip dhcp-server network add address=10.10.3.16/28 gateway=10.10.3.17 netmask=28
 
+/ip dhcp-server network add address=192.168.99.64/26 gateway=192.168.99.70 netmask=26
 
 # Проверка, что DHCP работает:
 - Подключите ноутбук консольным кабелем к порту микротика
@@ -195,11 +195,11 @@ exit
 /interface bridge add name=dhcp_BR 
 /interface bridge port add bridge=dhcp_BR interface=ether9
 /interface bridge port add bridge=dhcp_BR interface=ether10
-/ip address add address 10.10.5.17/28 interface=dhcp_BR network=10.10.5.16
+/ip address add address 192.168.99.17/28 interface=dhcp_BR network=192.168.99.16
 
-/ip pool add name=BR_pool ranges=10.10.5.17-10.10.5.30
+/ip pool add name=BR_pool ranges=192.168.99.20-192.168.99.30
 /ip dhcp-server add address-pool=BR_pool disabled=no interface=dhcp_BR name=BR
-/ip dhcp-server network add address=10.10.5.16/28 gateway=10.10.5.17 netmask=28
+/ip dhcp-server network add address=192.168.99.16/28 gateway=192.168.99.17 netmask=28
 # Чтобы на втором микроте были днс сервера, необходимо выполнить следующую команду (чтобы браузер открылся)
 /ip dns servers=77.88.8.88,77.88.8.2
 
@@ -310,18 +310,20 @@ sudo nano ~/docker-compose.yml
   auto
   by-commit
   path ftp://user:123@<IP-server>:/eltex-backup-$h-$t
+  path tftp://<IP-server>:/eltex-backup-$h-$t
+
   
 ```
 
 ## Восстановление Eltex из бекапа
 
-copy ftp://user:123@<IP-SERVER>:/<NAME BACKUP> system:candidate-config
+copy ftp://user:123@<IP-ADDRESS_SAMBA>:/<NAME BACKUP> system:candidate-config
 
 commit 
 confirm
 
 #### как пример
-copy ftp://user:123@10.10.5.30:/eltex-$h-$t_20240501_122300 system:candidate-config 
+copy ftp://user:123@<IP-address-SAMBa>:/eltex-$h-$t_20240501_122300 system:candidate-config 
 
 ## Mikrotik Auto Backup
 
@@ -330,23 +332,14 @@ copy ftp://user:123@10.10.5.30:/eltex-$h-$t_20240501_122300 system:candidate-con
 /system script edit 0 source
 
 # вставляем этот скрипт
-  ```
-:local tmpdate [/system clock get date];
-:local months ("jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec");
-:local month [ :pick $tmpdate 0 3 ];
-:local mm ([ :find $months $month -1 ] + 1);
-:if ($mm < 10) do={ :set mm ("0" . $mm); }
-:local date ([:pick $tmpdate 4 6] ."-" . $mm ."-" . [:pick $tmpdate 7 11])
-       
+  ```      
 :local myname "Mikrotik-<УКАЗАТЬ ИМЯ HQ/BR>"
-:local fname ($myname."_".$date);
-:local bname ($myname."_".$date.".backup");
-:local ename ($myname."_".$date.".rsc");
+:local fname ($myname);
+:local bname ($myname.".backup");
 :local dstbname ("MIKROTIK_HOST/".$bname);
-:local dstename ("MIKROTIK_HOST/".$ename);
 :local ftpuser "user";
 :local ftppass "123";
-:local ftpaddr "<Заменить на IP сервера>";
+:local ftpaddr "<IP-server SAMBA>";
        
 /system backup save name=$fname password=BackPaSSword;
 :delay 5;
@@ -355,15 +348,15 @@ copy ftp://user:123@10.10.5.30:/eltex-$h-$t_20240501_122300 system:candidate-con
        
 /tool fetch address=$ftpaddr src-path=$bname user=$ftpuser password=$ftppass port=21 upload=yes mode=ftp dst-path=$dstbname
 :delay 10;
-/tool fetch address=$ftpaddr src-path=$ename user=$ftpuser password=$ftppass port=21 upload=yes mode=ftp dst-path=$dstename
-:delay 10;
   ```
+
+
 #### каждые пять минут будет отправляться backup
 /system scheduler add interval=5m name=backup_every_5m on-event=backup_to_run policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon start-time=startup
 
 
 ### Скачиваем backup и загружаемся с него
-/tool fetch address=10.10.3.29 src-path=MIKROTIK_HOST/Mikrotik-HQ_01-05-2024.backup user=user password=123 port=21 dst-path=backup_candidate.backup mode=ftp 
+/tool fetch address=<IP адрес SAMBA> src-path=MIKROTIK_HOST/Mikrotik-HQ_01-05-2024.backup user=user password=123 port=21 dst-path=backup_candidate.backup mode=ftp 
 /system backup load name=Mikrotik-HQ_01-05-2024.backup 
 password: BackPaSSword
 
@@ -396,8 +389,24 @@ commit
 confirm
 
 ## 7. Firewall
-#### Например нужно для адреса 10.10.3.30 заблокировать пинг по 8.8.8.8
-/ip firewall filter add action=drop chain=forward dst-address=8.8.8.8 log=yes protocol=icmp src-address=10.10.3.30
-#### разрешаем обращаться к нам по 21 порту оттовсюду
-/ip firewall filter add action=accept chain=input dst-port=21 protocol=tcp
+#### Например нужно для роутера BR-S
+### NTP
+/ip firewall filter add action=accept chain=forward dst-address=192.168.99.65 log=yes protocol=udp dst-port=123
+### ICMP
+/ip firewall filter add action=accept chain=forward dst-address=192.168.99.65 log=yes protocol=icmp
+### SSH
+/ip firewall filter add action=accept chain=forward dst-address=192.168.99.65 log=yes protocol=tcp dst-port=22
+### DNS
+/ip firewall filter add action=accept chain=forward dst-address=192.168.99.65 log=yes protocol=tcp dst-port=53
+### HTTP
+/ip firewall filter add action=accept chain=forward dst-address=192.168.99.65 log=yes protocol=tcp dst-port=80
+### HTTPS
+/ip firewall filter add action=accept chain=forward dst-address=192.168.99.65 log=yes protocol=tcp dst-port=443
+
+#### разрешаем обращаться к нам по 21 (FTP)
+/ip firewall filter add action=accept chain=forward dst-port=21 protocol=tcp
+
+/ip firewall filter add action=drop chain=forward dst-address=192.168.99.65
+
+
 
